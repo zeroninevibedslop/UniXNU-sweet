@@ -111,29 +111,27 @@ def load_d22ap_product():
             continue
         try:
             buf = path.read_bytes()
-            off = 0
-            nprops, nchildren = struct.unpack_from('<II', buf, off)
-            off += 8
-            for _ in range(nprops):
-                size, = struct.unpack_from('<I', buf, off + 32)
-                ln = size & 0x7fffffff
-                off += 36 + ((ln + 3) & ~3)
-            # Scan top-level children
-            for _ in range(nchildren):
-                child_off = off
-                cnprops, cnchildren = struct.unpack_from('<II', buf, off)
+            def parse_adt_node(b, off=0):
+                nprops, nchildren = struct.unpack_from('<II', b, off)
                 off += 8
-                cprops = []
-                for _ in range(cnprops):
-                    k = buf[off:off + 32].split(b'\0')[0].decode()
-                    s, = struct.unpack_from('<I', buf, off + 32)
-                    flag, l = s >> 31, s & 0x7fffffff
-                    v = buf[off + 36:off + 36 + l]
-                    cprops.append((k, v, flag))
-                    off += 36 + ((l + 3) & ~3)
-                pdict = {k: v for k, v, f in cprops}
+                props = []
+                for _ in range(nprops):
+                    name = b[off:off + 32].split(b'\0')[0].decode()
+                    size, = struct.unpack_from('<I', b, off + 32)
+                    flags, ln = size >> 31, size & 0x7fffffff
+                    props.append((name, flags, b[off + 36:off + 36 + ln]))
+                    off += 36 + ((ln + 3) & ~3)
+                ch_nodes = []
+                for _ in range(nchildren):
+                    child, off = parse_adt_node(b, off)
+                    ch_nodes.append(child)
+                return (props, ch_nodes), off
+
+            (root_props, children), _ = parse_adt_node(buf)
+            for cprops, _ in children:
+                pdict = {k: v for k, f, v in cprops}
                 if pdict.get('name') == b'product\0':
-                    return [(k, v) for k, v, f in cprops if not f and k not in ('name', 'AAPL,phandle')]
+                    return [(k, v) for k, f, v in cprops if not f and k not in ('name', 'AAPL,phandle')]
         except Exception:
             continue
     return None
@@ -143,8 +141,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path,
                         default=ROOT / 'build/sweet/boot/kernel.macho.adt')
-    parser.add_argument('--dram-size', type=lambda v: int(v, 0), required=True,
-                        help='DRAM size in bytes (e.g. 0x80000000 or 0x100000000)')
+    parser.add_argument('--dram-size', type=lambda v: int(v, 0), default=None,
+                        help='DRAM size in bytes (e.g. 0x80000000 or 0xfcc00000)')
     parser.add_argument('--owned-memory-size', type=lambda v: int(v, 0), default=None,
                         help='DarwinBoot contiguous memory window size')
     parser.add_argument('--root-match-volume-uuid', default=None,
@@ -165,8 +163,10 @@ def main():
                         help='Persistent Data volume without ephemeral-storage')
     parser.add_argument('--trust-cache', action='store_true',
                         help='TrustCache placeholder in /chosen/memory-map')
-    parser.add_argument('--highmem', action='store_true',
-                        help='Use high-memory DDR bank (base 0x100000000)')
+    parser.add_argument('--highmem', action='store_true', default=True,
+                        help='Use high-memory DDR bank (base 0x100000000, default on sweet)')
+    parser.add_argument('--no-highmem', dest='highmem', action='store_false',
+                        help='Use low-memory DDR bank (base 0x80000000)')
     parser.add_argument('--text-fixup', action='append', default=[],
                         help='Kernel signed text fixup rules')
     parser.add_argument('--ipad-identity', action='store_true',
@@ -178,7 +178,7 @@ def main():
     chip_id = args.chip_id if args.chip_id is not None else DEFAULT_CHIP_ID
 
     dram_base = HIGH_PHYS_BASE if args.highmem else DRAM_BASE
-    dram_size = HIGH_MEM_SIZE if args.highmem else args.dram_size
+    dram_size = HIGH_MEM_SIZE if args.highmem else (args.dram_size or DRAM_BASE)
 
     # CPU Nodes
     cpu_regs = [int(v, 0) for v in args.cpu_regs.split(',')]
@@ -193,11 +193,17 @@ def main():
             ('cpu-id', struct.pack('<I', index)),
             ('cluster-id', struct.pack('<I', 0)),
             ('cluster-type', struct.pack('<I', 0)),
+            ('die-cluster-id', struct.pack('<I', 0)),
+            ('cluster-core-id', struct.pack('<I', index)),
+            ('l2-cache-id', struct.pack('<I', index)),
+            ('l3-cache-id', struct.pack('<I', 0)),
             ('state', b'running\0' if index == 0 else b'stopped\0'),
             ('timebase-frequency', struct.pack('<I', TIMEBASE)),
-            ('clock-frequency', struct.pack('<Q', clock_freq)),
-            ('bus-frequency', struct.pack('<Q', 100000000)),
-            ('memory-frequency', struct.pack('<Q', 1866000000)),
+            ('clock-frequency', struct.pack('<I', clock_freq)),
+            ('bus-frequency', struct.pack('<I', 100000000)),
+            ('memory-frequency', struct.pack('<I', 1866000000)),
+            ('peripheral-frequency', struct.pack('<I', TIMEBASE)),
+            ('fixed-frequency', struct.pack('<I', TIMEBASE)),
         ]
         cpus.append(node(f'cpu{index}', cpu_props))
 
@@ -260,7 +266,7 @@ def main():
     ]
 
     # /arm-io node
-    gic_node = node('intc', [
+    gic_node = node('gic', [
         ('compatible', b'arm,gic-v3\0'),
         ('interrupt-controller', b''),
         ('virtual-timer-intid', struct.pack('<I', VTIMER_INTID)),
@@ -284,13 +290,42 @@ def main():
         ('reg', struct.pack('<2Q', UFS_BASE - SOC_BASE, UFS_SIZE)),
     ])
 
+    # Adreno 618 GPU Node
+    gpu_node = node('kgsl_3d0', [
+        ('compatible', b'qcom,adreno\0qcom,kgsl-3d0\0qcom,kgsl-3d\0'),
+        ('device_type', b'gpu-core\0'),
+        ('qcom,chipid', struct.pack('<I', 0x06010800)),
+        ('reg', struct.pack('<4Q',
+                            0x05000000 - SOC_BASE, 0x40000,
+                            0x05090000 - SOC_BASE, 0x9000)),
+    ])
+
+    # GMU Node (GMU + PDC + PDC SEQ)
+    gmu_node = node('gmu', [
+        ('compatible', b'qcom,adreno-gmu\0qcom,gpu-gmu\0'),
+        ('device_type', b'gmu\0'),
+        ('reg', struct.pack('<6Q',
+                            0x0506a000 - SOC_BASE, 0x31000,
+                            0x0b290000 - SOC_BASE, 0x10000,
+                            0x0b490000 - SOC_BASE, 0x10000)),
+    ])
+
+    # GPU SMMU Node
+    smmu_node = node('smmu', [
+        ('compatible', b'qcom,smmu-kgsl\0arm,smmu-v2\0qcom,smmu-v2\0'),
+        ('device_type', b'iommu\0'),
+        ('iommu-cells', struct.pack('<I', 1)),
+        ('reg', struct.pack('<2Q',
+                            0x05040000 - SOC_BASE, 0x10000)),
+    ])
+
     arm_io_node = node('arm-io', [
         ('device_type', b'sweet-io\0'),
         ('compatible', b'sweet-io\0arm-io\0'),
         ('#address-cells', struct.pack('<I', 2)),
         ('#size-cells', struct.pack('<I', 2)),
         ('ranges', struct.pack('<3Q', 0, SOC_BASE, 0x100000000 - SOC_BASE)),
-    ], [gic_node, wdt_node, disp_node, ufshc_node])
+    ], [gic_node, wdt_node, disp_node, ufshc_node, gpu_node, gmu_node, smmu_node])
 
     # Continuous-Splash Framebuffer Node
     fbcon_node = node('sweet-fbcon', [
@@ -353,12 +388,7 @@ def main():
 
     root_children = [
         node('chosen', chosen_props, chosen_children),
-        node('defaults', defaults_node.props[1:] if hasattr(defaults_node, 'props') else [
-            ('name', b'defaults\0'),
-            ('sleep-disabled', struct.pack('<I', 1)),
-            ('no-effaceable-storage', struct.pack('<I', 1)),
-            ('kern.maxvnodes', struct.pack('<I', 66560)),
-        ]),
+        defaults_node,
         node('cpus', [
             ('#address-cells', struct.pack('<I', 1)),
             ('#size-cells', struct.pack('<I', 0)),
