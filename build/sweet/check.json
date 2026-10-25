@@ -1,0 +1,13 @@
+{
+  "board": "sweet",
+  "soc": "SM7150",
+  "ipsw_product": "iPhone10,3",
+  "ipsw_build": "20H392",
+  "userdata_first_lba": 2853888,
+  "userdata_last_lba": 30922746,
+  "userdata_capacity_bytes": 114970046464,
+  "framebuffer_phys": "0x9c000000",
+  "ufs_phys": "0x01d84000",
+  "preflight_status": "PASS",
+  "missing_vendor_inputs": false
+}

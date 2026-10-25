@@ -1,0 +1,165 @@
+schema_version = 2
+
+[board]
+name = "sweet"
+soc = "SM7150"
+description = "Xiaomi Redmi Note 10 Pro"
+kit = "sweet"
+soc_source = "sm7150"
+os_profile = "ios-16.7.16-20H392"
+
+[ipsw]
+url = "https://updates.cdn-apple.com/2024FallFCS/fullrestores/062-81498/08F797CE-5201-4475-BC41-5ED2C9A13978/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw"
+product = "iPhone10,3"
+version = "16.7.16"
+build = "20H392"
+device_class = "d22ap"
+chip_id = 0x8015
+board_id = 14
+fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
+
+[userdata]
+first_lba = 2853888
+last_lba = 30922746
+lba_bytes = 4096
+windows = [
+  { name = "OS", component = "OS" },
+  { name = "SystemOS", component = "Cryptex1,SystemOS" },
+]
+
+[kernel]
+defconfig = "sweet_defconfig"
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "component:ArmDTPlatform",
+  "component:ArmCpu",
+  "component:SoftwareAES",
+  "build-software-aes-bindings.py",
+  "component:NativeUfs",
+  "component:VirtioMmioBlock",
+  "component:RamBlock",
+  "build-virtio-mmio-bindings.py --component RamBlock --directory build/ram-block",
+  "build-virtio-mmio-bindings.py --component VirtioMmioBlock",
+  "build-boot-progress.py",
+  "build-libpthread-kernel.py",
+  "component:NativeMobileDisplay",
+  "component:NativeHidInput",
+  "component:AppleKeyStoreState",
+]
+config_fragments = ["arch:configs/common.config", "soc:configs/sm7150.config", "os:configs/ios.config"]
+patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
+
+[firmware]
+config = "sweet"
+dsc = "Platforms/Xiaomi/sweetPkg/sweet.dsc"
+fd = "Build/sweetPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
+preflight = ["scripts/check-sweet.py"]
+submodules = ["Common/Mu", "Common/Mu_OEM_Sample", "Silicium-ACPI", "Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl"]
+patches = ["Resources/MuPatches/Gic-Spurious.patch"]
+packages = [
+  "{uefi}",
+  "{uefi}/Platforms/Xiaomi",
+  "{tree}/package",
+  "{tree}/drivers/DarwinBoot",
+  "{edk2}",
+  "{uefi}/Common/Mu",
+  "{uefi}/Common/Mu_OEM_Sample",
+  "{uefi}/Silicon/Qualcomm",
+  "{uefi}/Silicon/Silicium",
+  "{uefi}/Silicium-ACPI",
+  "{uefi}/Silicium-ACPI/Platforms/Xiaomi",
+  "{uefi}/Silicium-ACPI/Silicon/Qualcomm",
+]
+
+[firmware.defines]
+ENABLE_SECUREBOOT = "1"
+DEVICE_MODEL = "sweet"
+MEMORY_PROTECTION = "TRUE"
+SHIP_MODE = "FALSE"
+BUILDID_STRING = "sweet-research"
+
+[payload]
+volume = "SWEETESP"
+size_mib = 192
+loader = "firmware"
+title = "UniXNU (sweet)"
+dram_size = "0x80000000"
+skip_setup_tool = "scripts/seed-data-skip-setup.py"
+panic_screen = true
+kernel_args = [
+  "-v",
+  "serial=3",
+  "debug=0x14e",
+  "sweetfb_noconsole=1",
+  "sweetfb_hz=30",
+  "native-ufs-root=1",
+  "sweet-touch=1",
+  "sweet-keys=1",
+  "cpus=6",
+  "-no_slto_panic",
+  "ml-timeout-lock-panic-scale=40",
+]
+
+[payload.install]
+title = "Install and boot"
+confirm = "ERASE all iOS user data on sweet and install again?"
+confirm_titles = ["Erase Data, skip Hello, boot", "Erase Data, show Hello, boot"]
+confirm_args = ["sweet-data-reset=1", "sweet-data-reset=2"]
+
+[payload.adt]
+tool = "scripts/make-sweet-adt.py"
+chip_id = "0x8015"
+owned_memory_size = "0x80000000"
+root_match_volume_uuid = "00000000-0000-0000-0000-000000000000"
+packed_data_ramdisk = true
+persistent_data = true
+unique_chip_id = "required"
+
+[bootimg]
+dtb_node = [
+  { path = "/reserved-memory/splash_region", props = [
+    { name = "label", type = "s", value = "cont_splash_region" },
+    { name = "reg", type = "x", value = ["0x0", "0x9c000000", "0x0", "0x1700000"] },
+  ] },
+]
+
+[device_tree]
+source = "device:dts/sweet.dts"
+include_dirs = ["soc:dts"]
+
+[components]
+include = [
+  "ArmDTPlatform",
+  "ArmCpu",
+  "SoftwareAES",
+  "NativeUfs",
+  "VirtioMmioBlock",
+  "RamBlock",
+  "NativeMobileDisplay",
+  "NativeHidInput",
+  "AppleKeyStoreState",
+  "XnuPrelink",
+  "DarwinBoot",
+  "VerifiedRoot",
+]
+
+[adt.product.string]
+model = "xiaomi,sweet"
+artwork-display-gamut = "sRGB"
+
+[adt.product.u32]
+thin-bezel = 1
+
+[adt.defaults.u32]
+sleep-disabled = 1
+
+[adt.buttons.string]
+compatible = "buttons"
+device_type = "buttons"
+
+[adt.buttons.strings]
+button-names = ["hold", "voldown", "volup"]
+
+[adt.buttons.u32]
+home-button-type = 2
