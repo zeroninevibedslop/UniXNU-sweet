@@ -134,6 +134,10 @@ socat -u udp-recv:5140,reuseaddr -
 
 ---
 
+# Special Thanks
+- Gemini 3.8 Flash
+
+
 ## License
 
 This project is licensed under the **BSD-2-Clause-Patent** License. See the upstream [LICENSE](https://github.com/zeroninevibedslop/UniXNU/blob/main/LICENSE) for details.
