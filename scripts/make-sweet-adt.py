@@ -157,12 +157,18 @@ def main():
                         help='PSCI invocation method (smc for SM7150)')
     parser.add_argument('--packed-data-ramdisk', action='store_true',
                         help='Packed DBRDISK1 ramdisk handoff')
-    parser.add_argument('--data-ramdisk', action='store_true',
+    parser.add_argument('--data-ramdisk', action='store_true', default=True,
                         help='Dense memory-map RAMDisk placeholder')
-    parser.add_argument('--persistent-data', action='store_true',
+    parser.add_argument('--no-data-ramdisk', dest='data_ramdisk', action='store_false',
+                        help='Disable dense memory-map RAMDisk placeholder')
+    parser.add_argument('--persistent-data', action='store_true', default=True,
                         help='Persistent Data volume without ephemeral-storage')
-    parser.add_argument('--trust-cache', action='store_true',
+    parser.add_argument('--no-persistent-data', dest='persistent_data', action='store_false',
+                        help='Allow ephemeral-storage flag in /chosen')
+    parser.add_argument('--trust-cache', action='store_true', default=True,
                         help='TrustCache placeholder in /chosen/memory-map')
+    parser.add_argument('--no-trust-cache', dest='trust_cache', action='store_false',
+                        help='Disable TrustCache placeholder in /chosen/memory-map')
     parser.add_argument('--highmem', action='store_true', default=True,
                         help='Use high-memory DDR bank (base 0x100000000, default on sweet)')
     parser.add_argument('--no-highmem', dest='highmem', action='store_false',
@@ -312,7 +318,7 @@ def main():
 
     # GPU SMMU Node
     smmu_node = node('smmu', [
-        ('compatible', b'qcom,smmu-kgsl\0arm,smmu-v2\0qcom,smmu-v2\0'),
+        ('compatible', b'qcom,smmu-kgsl\0arm,smmu-v2\0qcom,smmu-v2\0qcom,adreno-smmu\0'),
         ('device_type', b'iommu\0'),
         ('iommu-cells', struct.pack('<I', 1)),
         ('reg', struct.pack('<2Q',

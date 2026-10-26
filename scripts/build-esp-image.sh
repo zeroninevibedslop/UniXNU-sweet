@@ -5,7 +5,7 @@ PAYLOAD_DIR="/mnt/ext_nvme/XNU_Sweet/UniXNU-sweet/build/payload"
 
 mkdir -p "$(dirname "$ESP_IMG")"
 rm -f "$ESP_IMG"
-truncate -s 26M "$ESP_IMG"
+truncate -s 31M "$ESP_IMG"
 
 podman run --rm -v /mnt/ext_nvme/XNU_Sweet:/workspace docker.io/library/alpine:latest sh -c "
   apk add --no-cache dosfstools mtools >/dev/null 2>&1

@@ -114,6 +114,7 @@ owned_memory_size = "0x80000000"
 root_match_volume_uuid = "00000000-0000-0000-0000-000000000000"
 packed_data_ramdisk = true
 persistent_data = true
+trust_cache = true
 unique_chip_id = "required"
 
 [bootimg]

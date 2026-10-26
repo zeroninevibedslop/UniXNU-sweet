@@ -78,7 +78,14 @@ def main():
     os_version = 0
     name = b''
     cmdline = b''
-    id_bytes = b'\x00' * 32
+    h = hashlib.sha1()
+    h.update(kernel_payload)
+    h.update(struct.pack('I', kernel_size))
+    h.update(esp_bytes)
+    h.update(struct.pack('I', ramdisk_size))
+    h.update(b'')
+    h.update(struct.pack('I', second_size))
+    id_bytes = h.digest() + b'\x00' * (32 - len(h.digest()))
     extra_cmdline = b''
 
     header = struct.pack(
