@@ -1,3 +1,4 @@
+> Still working on `ios-sweet\ios-extra`, After GPU driver patched, We will fully migrate to UNIXNU
 # UniXNU-sweet: Xiaomi Redmi Note 10 Pro (sweet / SM7150) Device Repository
 
 [![License](https://img.shields.io/badge/license-BSD--2--Clause--Patent-blue.svg)](LICENSE)
